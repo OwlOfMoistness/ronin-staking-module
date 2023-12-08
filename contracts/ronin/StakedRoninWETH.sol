@@ -10,6 +10,7 @@ pragma solidity ^0.8.17;
 import "@openzeppelin/token/ERC20/extensions/ERC4626.sol";
 import "@openzeppelin/token/ERC20/IERC20.sol";
 import "@openzeppelin/access/Ownable.sol";
+import {Math} from "@openzeppelin/utils/math/Math.sol";
 
 error ErrRequestFulfilled();
 error ErrWithdrawalProcessInitiated();
@@ -23,18 +24,23 @@ enum WithdrawalStatus {
 }
 
 contract StakedRoninWETH is ERC4626, Ownable {
+	using Math for uint256;
 
 	struct WithdrawalRequest {
 		bool fulfilled;
 		uint256 shares;
 	}
 
+	struct LockedPricePerShare {
+		uint256 shareSupply;
+		uint256 assetSupply;
+	}
 
 	uint256 public cumulativeWETHStaked;
 	uint256 public withdrawalEpoch;
 	uint256 public depositLimit;
 
-	mapping(uint256 => uint256) public lockedPricePerSharePerEpoch;
+	mapping(uint256 => LockedPricePerShare) public lockedPricePerSharePerEpoch;
 	mapping(uint256 => mapping(address => WithdrawalRequest)) public withdrawalRequestsPerEpoch;
 	mapping(uint256 => uint256) public lockedstrETHPerEpoch;
 	mapping(uint256 => WithdrawalStatus) public statusPerEpoch;
@@ -64,7 +70,7 @@ contract StakedRoninWETH is ERC4626, Ownable {
 		uint256 epoch = withdrawalEpoch++;
 		if (statusPerEpoch[epoch] == WithdrawalStatus.INITIATED) revert ErrWithdrawalEpochNotInitiated();
 
-		lockedPricePerSharePerEpoch[epoch] = previewRedeem(1e18);
+		lockedPricePerSharePerEpoch[epoch] = LockedPricePerShare(totalSupply(), totalAssets());
 		statusPerEpoch[epoch] = WithdrawalStatus.FINALISED;
 	}
 
@@ -101,8 +107,9 @@ contract StakedRoninWETH is ERC4626, Ownable {
 		if (statusPerEpoch[_epoch] != WithdrawalStatus.FINALISED) revert ErrWithdrawalProcessNotFinalised();
 
 		uint256 shares = request.shares;
-		uint256 epochPricePerShare = lockedPricePerSharePerEpoch[_epoch];
-		uint256 assets = previewRedeem(shares);
+		LockedPricePerShare memory lockLog = lockedPricePerSharePerEpoch[_epoch];
+		uint256 epochPricePerShare = _convertToAssets(shares, lockLog.assetSupply, lockLog.shareSupply);
+		uint256 assets = shares * epochPricePerShare / 1e18;
 		request.fulfilled = true;
 		_burn(address(this), shares);
 		IERC20(asset()).transfer(msg.sender, assets);
@@ -116,4 +123,8 @@ contract StakedRoninWETH is ERC4626, Ownable {
 		statusPerEpoch[epoch] = WithdrawalStatus.INITIATED;
 		emit WithdrawalProcessInitiated(epoch, previewRedeem(lockedstrETHPerEpoch[epoch]));
 	}
+
+    function _convertToAssets(uint256 shares, uint256 totalAssets, uint256 totalShares) internal view virtual returns (uint256) {
+        return shares.mulDiv(totalAssets + 1, totalShares + 10 ** _decimalsOffset(), Math.Rounding.Down);
+    }
 }

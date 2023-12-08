@@ -5,7 +5,7 @@
 <pre>
 REP-0009
 Title: Add Ether staking capability to the Ronin bridge on mainnet
-Author: Owl Of  Moistness (discord: owlofmoistness)
+Author: Owl Of Moistness (discord: owlofmoistness)
 Type: Bridge Track
 Status: Draft
 Created: 2023-12-06
@@ -27,10 +27,10 @@ The current proposed system involved the creation of a new ERC-4626 Tokenised va
 
 The token representing the vault will be called Staked Ronin Ether (strETH). Over time strETH will increase with value as more ether rewards are realised.
 
-An additional module should be added to the Ronin Bridge V2 contract on mainnet called the Staked Ether Manager (SEM) that will be responsible of depositing and withdrawing ether to and from different LSDs (Currently eligible projects would be Lido Finance, RocketPool and Frax Finance).
+An additional module should be added to the Ronin Bridge V2 contract on mainnet called the Staked Ether Manager (SEM) that will be responsible for depositing and withdrawing ether to and from different LSDs (Currently eligible projects would be Lido Finance, RocketPool and Frax Finance).
 
 
-Users shall be to deposit without any restrictions their WETH to obtain strETH until the deposit limit is reached. This limit can be updated at any given time to be increased or decreased. When WETH is deposited, it increments a `cumulativeWETHStaked` variable that will be sent to mainnet to indicate how much ether can be used for staking. User shall be able to redeem their strETH back into WETH every cyclic withdrawal periods (every 7 days + mainnet unwinding time).
+Users shall be able to deposit without any restrictions their WETH to obtain strETH until the deposit limit is reached. This limit can be updated at any given time to be increased or decreased. When WETH is deposited, it increments a `cumulativeWETHStaked` variable that will be sent to mainnet to indicate how much ether can be used for staking. User shall be able to redeem their strETH back into WETH every cyclic withdrawal periods (every 7 days + mainnet unwinding time).
 
 
 A final requirement is necessary in the form of task required to be performed by Bridge operators. The operators will need to provide:
