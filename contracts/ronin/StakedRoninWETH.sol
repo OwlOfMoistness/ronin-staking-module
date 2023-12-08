@@ -16,6 +16,7 @@ error ErrRequestFulfilled();
 error ErrWithdrawalProcessInitiated();
 error ErrWithdrawalProcessNotFinalised();
 error ErrWithdrawalEpochNotInitiated();
+error ErrInvalidOperator();
 
 enum WithdrawalStatus {
 	STANDBY,
@@ -45,6 +46,8 @@ contract StakedRoninWETH is ERC4626, Ownable {
 	mapping(uint256 => uint256) public lockedstrETHPerEpoch;
 	mapping(uint256 => WithdrawalStatus) public statusPerEpoch;
 
+	mapping(address => bool) public operator;
+
 	event WithdrawalRequested(address indexed requester, uint256 indexed epoch, uint256 amount);
 	event WithdrawalCancelled(address indexed requester, uint256 indexed epoch, uint256 amount);
 	event WithdrawalClaimed(address indexed claimer, uint256 indexed epoch, uint256 amount, uint256 pricePerShare);
@@ -53,6 +56,15 @@ contract StakedRoninWETH is ERC4626, Ownable {
 	constructor(address _weth)
 		ERC4626(IERC20(_weth))
 		ERC20("Staked Ronin Ether", "strETH") {}
+
+	modifier onlyOperator() {
+		if (msg.sender != owner() || operator[msg.sender]) revert ErrInvalidOperator();
+		_;
+	}
+
+	function updateOperator(address _operator, bool _value) external onlyOwner {
+		operator[_operator] = _value;
+	}
 
 	function setDepositLimit(uint256 _limit) external onlyOwner {
 		depositLimit = _limit;
@@ -65,15 +77,39 @@ contract StakedRoninWETH is ERC4626, Ownable {
 		return assets > depositLimit ? 0 : (depositLimit - assets);
 	}
 
+	/**  
+	 * @notice
+	 * External function that initiaties a withdrawal period.
+	 * Price per share is locked for specific ecpoch to be used to users to redeem their strETH
+	 */
+	function initiateWithdrawal() external onlyOperator{
+		// TODO add governance check to make sure only contract that has been updated by bridge operators can send final price per share
+
+		uint256 epoch = withdrawalEpoch;
+		uint256 etherNeeded = previewRedeem(lockedstrETHPerEpoch[epoch]);
+		statusPerEpoch[epoch] = WithdrawalStatus.INITIATED;
+		lockedPricePerSharePerEpoch[epoch] = LockedPricePerShare(lockedstrETHPerEpoch[epoch], etherNeeded);
+		emit WithdrawalProcessInitiated(epoch, etherNeeded);
+	}
+
+	/**  
+	 * @notice
+	 * External function that finalises a withdrawal period.
+	 * Price per share is locked for specific ecpoch to be used to users to redeem their strETH
+	 * @param _signatures signatures provided by bridge operators to enable this function to be executed.
+	 * 					  If quorum if signatures is not reached, this functino will revert.
+	 */
 	function settleEpochPricePerSharePeriod(bytes[] calldata _signatures) external {
 		// TODO add governance check to make sure only contract that has been updated by bridge operators can send final price per share
 		uint256 epoch = withdrawalEpoch++;
 		if (statusPerEpoch[epoch] == WithdrawalStatus.INITIATED) revert ErrWithdrawalEpochNotInitiated();
-
-		lockedPricePerSharePerEpoch[epoch] = LockedPricePerShare(totalSupply(), totalAssets());
 		statusPerEpoch[epoch] = WithdrawalStatus.FINALISED;
 	}
 
+	/**  
+	 * @notice
+	 * Following 3 functions have bene overidden to prevent unintended deposit or withdrawal effects
+	 */
 	function mint(uint256 shares, address receiver) public override returns (uint256) {}
 	function withdraw(uint256 assets, address receiver, address owner) public override returns (uint256) {}
 	function redeem(uint256 shares, address receiver, address owner) public override returns (uint256) {}
@@ -87,6 +123,11 @@ contract StakedRoninWETH is ERC4626, Ownable {
 		super.deposit(_amount, _to);
 	}
 
+	/**  
+	 * @notice
+	 * External function that allows a user to lock their strETH to be claimed into WETH at the end of the withdrawal period
+	 * @param _shares Amount of shares to be locked to be claimed once withdrawal period is over
+	 */
 	function requestWithdrawal(uint256 _shares) external {
 		uint256 epoch = withdrawalEpoch;
 		WithdrawalRequest storage request = withdrawalRequestsPerEpoch[epoch][msg.sender];
@@ -100,7 +141,13 @@ contract StakedRoninWETH is ERC4626, Ownable {
 		emit WithdrawalRequested(msg.sender, epoch, _shares);
 	}
 
-	function claim(uint256 _epoch) external {
+	/**  
+	 * @notice
+	 * External function that allows a user redeem their strETH into WETH based on the price per share locked during initiation of withdrawal
+	 * @param _epoch Epoch form which to redeem strETH into WETH
+	 */
+
+	function redeem(uint256 _epoch) external {
 		uint256 epoch = withdrawalEpoch;
 		WithdrawalRequest storage request = withdrawalRequestsPerEpoch[_epoch][msg.sender];
 		if (request.fulfilled) revert ErrRequestFulfilled();
@@ -114,14 +161,6 @@ contract StakedRoninWETH is ERC4626, Ownable {
 		_burn(address(this), shares);
 		IERC20(asset()).transfer(msg.sender, assets);
 		emit WithdrawalClaimed(msg.sender, epoch, shares, epochPricePerShare);
-	}
-
-	function initiateWithdrawal() external {
-		// TODO add governance check to make sure only contract that has been updated by bridge operators can send final price per share
-
-		uint256 epoch = withdrawalEpoch;
-		statusPerEpoch[epoch] = WithdrawalStatus.INITIATED;
-		emit WithdrawalProcessInitiated(epoch, previewRedeem(lockedstrETHPerEpoch[epoch]));
 	}
 
     function _convertToAssets(uint256 shares, uint256 totalAssets, uint256 totalShares) internal view virtual returns (uint256) {
