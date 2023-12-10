@@ -20,7 +20,6 @@ abstract contract LidoStakeManager {
 	}
 
 	address immutable public wstETH;
-	address immutable public stETH;
 	address immutable public LIDO_QUEUE;
 
 	uint256 public lidoTotalWithdrawals;
@@ -30,9 +29,8 @@ abstract contract LidoStakeManager {
 
 	event LidoWithdrawalRequests(uint256[] requests);
 
-	constructor(address _wsteth, address _steth, address _queue) {
+	constructor(address _wsteth, address _queue) {
 		wstETH = _wsteth;
-		stETH = _steth;
 		LIDO_QUEUE = _queue;
 	}
 

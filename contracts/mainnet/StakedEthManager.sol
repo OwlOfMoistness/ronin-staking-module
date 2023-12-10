@@ -12,6 +12,7 @@ import "./RocketPoolStakeManager.sol";
 import "./LidoStakeManager.sol";
 import "./FraxStakeManager.sol";
 import "./RoninBridgeManager.sol";
+import "./QuorumManager.sol";
 
 error ErrLatestBalanceCannotBeSmaller();
 error ErrNothingToStake();
@@ -30,8 +31,20 @@ enum SEMStatus {
 	SHUTDOWN
 }
 
-contract StakedEtherManager is RocketPoolStakeManager, LidoStakeManager, RoninBridgeManager, FraxStakeManager, Ownable {
+contract StakedEtherManager is
+		 RocketPoolStakeManager,
+		 LidoStakeManager,
+		 RoninBridgeManager,
+		 FraxStakeManager,
+		 QuorumManager,
+		 Ownable {
 	uint256 constant public MAX_PRECISION = 10_000;
+	// keccak256("cumulativeWETHStaked")
+	bytes32 constant public CUMULATIVE_HASH = 0x71a4612cb38a450aa2e0d0adf2336a60552e49a7344e54432ee30e6bd4066ec3;
+
+	// keccak256("ETHToWithdrawPerEpoch")
+	bytes32 constant public ETH_REQUIRED_HASH = 0xd285e754ead803ece6d8c29f3a41293518a1874a4b27f5551ba4e6bc9be0a1b6;
+
 
 	uint256 public cumulativeWethStakedCheckpoint;
 	uint256 public cumulativeWETHStaked;
@@ -43,14 +56,13 @@ contract StakedEtherManager is RocketPoolStakeManager, LidoStakeManager, RoninBr
 
 	mapping(uint256 => uint256) public ETHToWithdrawPerEpoch;
 	mapping(uint256 => uint256) public ETHWithdrawnPerEpoch;
-	mapping(address => bool) public operator;
+	mapping(address => bool) public SEMOperator;
 
 	// this event should mint WETH into splitter contract on ronin
 	event RealiseRewards(uint256 rewardAmount);
 
 	constructor(
 		address _wsteth,
-		address _steth,
 		address _lidoQueue,
 		address _fraxMinter,
 		address _fraxQueue,
@@ -59,18 +71,18 @@ contract StakedEtherManager is RocketPoolStakeManager, LidoStakeManager, RoninBr
 		address _pool,
 		address _bridge)
 		RocketPoolStakeManager(_reth, _pool)
-		LidoStakeManager(_wsteth, _steth, _lidoQueue) 
+		LidoStakeManager(_wsteth, _lidoQueue) 
 		FraxStakeManager(_fraxMinter, _fraxQueue, _sfrxEth)
 		RoninBridgeManager(_bridge) {
 	}
 
 	modifier onlySEMOperator() {
-		if (msg.sender != owner() || operator[msg.sender]) revert ErrInvalidSEMOperator();
+		if (msg.sender != owner() || SEMOperator[msg.sender]) revert ErrInvalidSEMOperator();
 		_;
 	}
 
 	function updateOperator(address _operator, bool _value) external onlyOwner {
-		operator[_operator] = _value;
+		SEMOperator[_operator] = _value;
 	}
 
 	function overrideState(SEMStatus _state) external onlyOwner {
@@ -123,9 +135,10 @@ contract StakedEtherManager is RocketPoolStakeManager, LidoStakeManager, RoninBr
 	 * @param _signatures signatures provided by bridge operators to enable this function to be executed.
 	 * 					  If quorum if signatures is not reached, this functino will revert.
 	 */
-	function consensusUpdateCumulative(uint256 _cumulativeWETHStaked, bytes[] calldata _signatures) external {
-		// TODO add consensus check where enough signatures are given to update the staking data appropriately
+	function consensusUpdateCumulative(uint256 _cumulativeWETHStaked, Signature[] calldata _signatures) external {
 		if (_cumulativeWETHStaked < cumulativeWETHStaked) revert ErrLatestBalanceCannotBeSmaller();
+
+		_validateSignatures(_cumulativeWETHStaked, CUMULATIVE_HASH, _getBridgeManager(), _signatures);
 		cumulativeWETHStaked = _cumulativeWETHStaked;
 	}
 
@@ -136,9 +149,10 @@ contract StakedEtherManager is RocketPoolStakeManager, LidoStakeManager, RoninBr
 	 * @param _signatures signatures provided by bridge operators to enable this function to be executed.
 	 * 					  If quorum if signatures is not reached, this functino will revert.
 	 */
-	function consensusInitiateWithdrawalRequest(uint256 _ethToBeWithdrawn, bytes[] calldata _signatures) external {
-		// TODO add consensus check where enough signatures are given to update the staking data appropriately
+	function consensusInitiateWithdrawalRequest(uint256 _ethToBeWithdrawn, Signature[] calldata _signatures) external {
 		if (SEMState != SEMStatus.STANDBY) revert ErrSEMAlreadyInWithdrawalCycle();
+
+		_validateSignatures(_ethToBeWithdrawn, ETH_REQUIRED_HASH, _getBridgeManager(), _signatures);
 		SEMState = SEMStatus.INITIATED;
 		ETHToWithdrawPerEpoch[currentEpoch] = _ethToBeWithdrawn;
 	}
