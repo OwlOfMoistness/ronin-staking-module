@@ -9,7 +9,7 @@ pragma solidity ^0.8.17;
 
 import "@openzeppelin/token/ERC20/extensions/ERC4626.sol";
 import "@openzeppelin/token/ERC20/IERC20.sol";
-import "@openzeppelin/access/Ownable.sol";
+import "../lib/Pausable.sol";
 import "@openzeppelin/utils/math/Math.sol";
 import "../../interfaces/IRoninGateway.sol";
 import "../../interfaces/IBridgeManager.sol";
@@ -28,7 +28,7 @@ enum WithdrawalStatus {
 	FINALISED
 }
 
-contract StakedRoninWETH is ERC4626, Ownable {
+contract StakedRoninWETH is ERC4626, Pausable {
 	using Math for uint256;
 
 	struct WithdrawalRequest {
@@ -97,7 +97,7 @@ contract StakedRoninWETH is ERC4626, Ownable {
 	 * External function that initiaties a withdrawal period.
 	 * Price per share is locked for specific ecpoch to be used to users to redeem their strETH
 	 */
-	function initiateWithdrawal() external onlyOperator{
+	function initiateWithdrawal() external onlyOperator whenNotPaused {
 		uint256 epoch = withdrawalEpoch;
 		uint256 etherNeeded = previewRedeem(lockedstrETHPerEpoch[epoch]);
 
@@ -111,7 +111,7 @@ contract StakedRoninWETH is ERC4626, Ownable {
 	 * External function that finalises a withdrawal period.
 	 * Enough bridge operators must call this function to change the state of the withdrawal to finalised
 	 */
-	function submitSettleEpochVote() external {
+	function submitSettleEpochVote() external whenNotPaused {
 		uint256 epoch = withdrawalEpoch;
 		if (statusPerEpoch[epoch] == WithdrawalStatus.INITIATED) revert ErrWithdrawalEpochNotInitiated();
 		_submitVote(epoch, msg.sender);
@@ -132,9 +132,9 @@ contract StakedRoninWETH is ERC4626, Ownable {
 		deposit(_amount, msg.sender);
 	}
 
-	function deposit(uint256 _amount, address _to) public override returns (uint256) {
+	function deposit(uint256 _amount, address _to) public override whenNotPaused returns (uint256) {
 		cumulativeWETHStaked += _amount;
-		super.deposit(_amount, _to);
+		return super.deposit(_amount, _to);
 	}
 
 	/**  
@@ -142,7 +142,7 @@ contract StakedRoninWETH is ERC4626, Ownable {
 	 * External function that allows a user to lock their strETH to be claimed into WETH at the end of the withdrawal period
 	 * @param _shares Amount of shares to be locked to be claimed once withdrawal period is over
 	 */
-	function requestWithdrawal(uint256 _shares) external {
+	function requestWithdrawal(uint256 _shares) external whenNotPaused {
 		uint256 epoch = withdrawalEpoch;
 		WithdrawalRequest storage request = withdrawalRequestsPerEpoch[epoch][msg.sender];
 
@@ -159,7 +159,7 @@ contract StakedRoninWETH is ERC4626, Ownable {
 	 * @param _epoch Epoch form which to redeem strETH into WETH
 	 */
 
-	function redeem(uint256 _epoch) external {
+	function redeem(uint256 _epoch) external whenNotPaused {
 		uint256 epoch = withdrawalEpoch;
 		WithdrawalRequest storage request = withdrawalRequestsPerEpoch[_epoch][msg.sender];
 		if (request.fulfilled) revert ErrRequestFulfilled();

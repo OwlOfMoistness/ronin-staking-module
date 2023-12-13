@@ -7,7 +7,7 @@ pragma solidity ^0.8.17;
  *    -"-"-
  */
 
-import "@openzeppelin/access/Ownable.sol";
+import "../lib/Pausable.sol";
 import "./RocketPoolStakeManager.sol";
 import "./LidoStakeManager.sol";
 import "./FraxStakeManager.sol";
@@ -37,7 +37,7 @@ contract StakedEtherManager is
 		 RoninBridgeManager,
 		 FraxStakeManager,
 		 QuorumManager,
-		 Ownable {
+		 Pausable {
 	uint256 constant public MAX_PRECISION = 10_000;
 	// keccak256("cumulativeWETHStaked")
 	bytes32 constant public CUMULATIVE_HASH = 0x71a4612cb38a450aa2e0d0adf2336a60552e49a7344e54432ee30e6bd4066ec3;
@@ -135,7 +135,7 @@ contract StakedEtherManager is
 	 * @param _signatures signatures provided by bridge operators to enable this function to be executed.
 	 * 					  If quorum if signatures is not reached, this functino will revert.
 	 */
-	function consensusUpdateCumulative(uint256 _cumulativeWETHStaked, Signature[] calldata _signatures) external {
+	function consensusUpdateCumulative(uint256 _cumulativeWETHStaked, Signature[] calldata _signatures) external whenNotPaused {
 		if (_cumulativeWETHStaked < cumulativeWETHStaked) revert ErrLatestBalanceCannotBeSmaller();
 
 		_validateSignatures(_cumulativeWETHStaked, CUMULATIVE_HASH, _getBridgeManager(), _signatures);
@@ -149,7 +149,7 @@ contract StakedEtherManager is
 	 * @param _signatures signatures provided by bridge operators to enable this function to be executed.
 	 * 					  If quorum if signatures is not reached, this functino will revert.
 	 */
-	function consensusInitiateWithdrawalRequest(uint256 _ethToBeWithdrawn, Signature[] calldata _signatures) external {
+	function consensusInitiateWithdrawalRequest(uint256 _ethToBeWithdrawn, Signature[] calldata _signatures) external whenNotPaused {
 		if (SEMState != SEMStatus.STANDBY) revert ErrSEMAlreadyInWithdrawalCycle();
 
 		_validateSignatures(_ethToBeWithdrawn, ETH_REQUIRED_HASH, _getBridgeManager(), _signatures);
@@ -163,7 +163,7 @@ contract StakedEtherManager is
 	 * @param _ratios Ratio provided to specify how much ether to deposit in each LSD (RP, lido, frax)
 	 * @param _desiredAmount Total amount of ether to be deposited. Must be lower or equal than current available ether to be deposited
 	 */
-	function stake(uint256[3] calldata _ratios, uint256 _desiredAmount) external onlySEMOperator {
+	function stake(uint256[3] calldata _ratios, uint256 _desiredAmount) external onlySEMOperator whenNotPaused {
 		uint256 amount = cumulativeWETHStaked - cumulativeWethStakedCheckpoint;
 		if (SEMState != SEMStatus.STANDBY) revert ErrCannotStake();
 		if (amount == 0) revert ErrNothingToStake();
@@ -184,7 +184,7 @@ contract StakedEtherManager is
 	 * External function that allows to deposit ether dust into LSDs
 	 * @param _ratios Ratio provided to specify how much ether to deposit in each LSD (RP, lido, frax)
 	 */
-	function stakeDust(uint256[3] calldata _ratios) external onlySEMOperator {
+	function stakeDust(uint256[3] calldata _ratios) external onlySEMOperator whenNotPaused {
 		uint256 _desiredAmount = address(this).balance;
 		if (SEMState != SEMStatus.STANDBY) revert ErrCannotStake();
 		if (_desiredAmount == 0) revert ErrNothingToStake();
@@ -204,7 +204,7 @@ contract StakedEtherManager is
 	 * @param _ratios Ratio provided to specify how much ether to withdraw from each LSD (RP, lido, frax)
 	 * @param _desiredAmount Total amount of ether to be withdrawn during this call (not necessarily equal to asked amount by bridge)
 	 */
-	function unstakeInit(uint256[3] calldata _ratios, uint256 _desiredAmount) external onlySEMOperator {
+	function unstakeInit(uint256[3] calldata _ratios, uint256 _desiredAmount) external onlySEMOperator whenNotPaused {
 		uint256 amountToBeWithdrawn;
 		uint256 currentWithdrawn = ETHWithdrawnPerEpoch[currentEpoch];
 		uint256 totalNeeded = ETHToWithdrawPerEpoch[currentEpoch];
@@ -238,7 +238,7 @@ contract StakedEtherManager is
 	 * External function that to withdraw ether from LSDs after a withdrawal request has been submitted. It will withdraw from Lido and frax
 	 * by burning previously minted NFTs.
 	 */
-	function unstakeFinalise() external onlySEMOperator {
+	function unstakeFinalise() external onlySEMOperator whenNotPaused {
 		uint256 currentWithdrawn = ETHWithdrawnPerEpoch[currentEpoch];
 		uint256 totalNeeded = ETHToWithdrawPerEpoch[currentEpoch];
 		uint256 unstakedAmount;
