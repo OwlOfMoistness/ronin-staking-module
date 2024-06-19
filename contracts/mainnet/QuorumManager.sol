@@ -9,6 +9,7 @@ pragma solidity ^0.8.17;
 
 import "@openzeppelin/utils/cryptography/ECDSA.sol";
 import "../../interfaces/IBridgeManager.sol";
+import "../../interfaces/IRoninGateway.sol";
 
 error ErrConsumedHash();
 error ErrInvalidOrder();
@@ -16,12 +17,6 @@ error ErrQueryForInsufficientVoteWeight();
 
 abstract contract QuorumManager {
 	using ECDSA for bytes32;
-
-	struct Signature {
-		uint8 v;
-		bytes32 r;
-		bytes32 s;
-	}
 
 	mapping(bytes32 => bool) public consumedHashes;
 
@@ -41,9 +36,9 @@ abstract contract QuorumManager {
 			);
     }
 
-	function _validateSignatures(uint256 _value, bytes32 _variableSig, address _bridgeManager, Signature[] memory _signatures) internal {
-		bytes32 valueHash = keccak256(abi.encodePacked(_value, _variableSig));
-		bytes32 digest = valueDigest(DOMAIN_SEPARATOR(), valueHash);
+	function _validateSignatures(address _value, uint256 counter, bytes32 _variableSig, address _bridgeManager, IRoninGateway.Signature[] memory _signatures) internal {
+		bytes32 valueHash = keccak256(abi.encodePacked(_value, counter, _variableSig));
+		bytes32 digest = _valueDigest(DOMAIN_SEPARATOR(), valueHash);
 		uint256 minimumVoteWeight = _getTotalWeight(_bridgeManager) * 70 / 100;
 		
 		if (consumedHashes[valueHash]) revert ErrConsumedHash();
@@ -51,7 +46,7 @@ abstract contract QuorumManager {
 			bool _passed;
 			address _signer;
 			address _lastSigner;
-			Signature memory _sig;
+			IRoninGateway.Signature memory _sig;
 			uint256 _weight;
 			for (uint256 _i; _i < _signatures.length; ) {
 				_sig = _signatures[_i];
@@ -84,7 +79,7 @@ abstract contract QuorumManager {
 		return IBridgeManager(_bridgeManager).getTotalWeight();
 	}
 
-	function valueDigest(bytes32 _domainSeparator, bytes32 _valueHash) internal pure returns(bytes32) {
+	function _valueDigest(bytes32 _domainSeparator, bytes32 _valueHash) internal pure returns(bytes32) {
 		return _domainSeparator.toTypedDataHash(_valueHash);
 	}
 }
