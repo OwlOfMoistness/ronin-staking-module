@@ -67,7 +67,7 @@ contract StakedRoninWETH is ERC4626, SEMController {
 	event WithdrawalRequested(address indexed requester, uint256 indexed epoch, uint256 amount);
 	event WithdrawalCancelled(address indexed requester, uint256 indexed epoch, uint256 amount);
 	event WithdrawalClaimed(address indexed claimer, uint256 indexed epoch, uint256 amount, uint256 pricePerShare);
-	event WithdrawalProcessInitiated(uint256 indexed epoch, uint256 wethRequired);
+	event WithdrawalProcessInitiated(uint256 indexed epoch);
 
 	constructor(address _weth, address _gatewayV3)
 		ERC4626(IERC20(_weth))
@@ -115,10 +115,9 @@ contract StakedRoninWETH is ERC4626, SEMController {
 	function initiateWithdrawalEpoch() external onlyOperator whenNotPaused {
 		if (statusPerEpoch[withdrawalEpoch] != WithdrawalStatus.STANDBY) revert ErrWithdrawalEpochAlreadyEngaged();
 		uint256 epoch = withdrawalEpoch;
-		uint256 etherNeeded = previewRedeem(lockedstrETHPerEpoch[epoch]);
 
 		statusPerEpoch[epoch] = WithdrawalStatus.INITIATED;
-		emit WithdrawalProcessInitiated(epoch, etherNeeded);
+		emit WithdrawalProcessInitiated(epoch);
 	}
 
 	/**  
@@ -167,6 +166,8 @@ contract StakedRoninWETH is ERC4626, SEMController {
 	}
 
 	function deposit(uint256 _amount, address _to) public override whenNotPaused returns (uint256) {
+		uint256 epoch = withdrawalEpoch;
+		if (statusPerEpoch[epoch] != WithdrawalStatus.STANDBY) revert ErrWithdrawalProcessInitiated();
 		return super.deposit(_amount, _to);
 	}
 
