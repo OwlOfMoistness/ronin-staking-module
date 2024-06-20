@@ -27,29 +27,26 @@ The current proposed system involved the creation of a new ERC-4626 Tokenised va
 
 The token representing the vault will be called Staked Ronin Ether (strETH). Over time strETH will increase with value as more ether rewards are realised.
 
-An additional module should be added to the Ronin Bridge V2 contract on Ethereum network called the Staked Ether Manager (SEM) that will be responsible for depositing and withdrawing ether to and from different LSDs (Currently eligible projects would be Lido Finance, RocketPool and Frax Finance).
+An additional module should be added to the Ronin Bridge V2 contract on Ethereum network called the Staked Ether Manager (SEM) that will be responsible for depositing and withdrawing ether to and from RocketPool and a StakeWise vault that we will control.
 
-
-Users shall be able to deposit without any restrictions their WETH to obtain strETH until the deposit limit is reached. This limit can be updated at any given time to be increased or decreased. When WETH is deposited, it increments a `cumulativeWETHStaked` variable that will be sent to Ethereum to indicate how much ether can be used for staking. User shall be able to redeem their strETH back into WETH every cyclic withdrawal periods (every 7 days + Ethereum unwinding time).
+Users shall be able to deposit without any restrictions their WETH to obtain strETH until the deposit limit is reached. This limit can be updated at any given time to be increased or decreased. When WETH is deposited, it can be sent back to the Ethereum chain for staking. User shall be able to redeem their strETH back into WETH every cyclic withdrawal periods (every 7 days + Ethereum unwinding time).
 
 
 A final requirement is necessary in the form of task required to be performed by Bridge operators. The operators will need to provide:
 
-- Regular update of the cumulative amount of deposited WETH on the strETH contract from Ronin network  to the SEM module on Ethereum.
-- Regular update of the the realised ether rewards from holding various LSDs that should trigger WETH minting in the strETH contract on Ronin network.
-- Cyclic update of the required Ether to be withdrawn every Withdrawal period from the strETH contract on Ronin network to the SEM module on Ethereum
-- Cyclic update of the finalisation of the Withdrawal period from the SEM module on Ethereum to the strETH contract on Ronin network
+- Updates of the TVL on ETH back to Ronin every withdrawal cycle
 
 Operators will need to reach quorum to transfer information in between Ronin Network and Ethereum, acting as oracles.
 
 A withdrawal cycle will occur like this:
-1. During 7 days, users will be able to request their strETH to be redeemed. This action will lock their tokens into the contract and cannot be undone.
-2. After the 7 days, the withdrawal request is initiated on Ronin network and an event is emitted providing the necessary ether to be withdrawn on Ethereum. This information will be relayed by the bridge operators
-3. After receiving the Withdrawal Initiation event from ronin, the SEM will start the process of unwinding enough LSDs to obtain the required ether amount to be withdrawn. This may be instant or may take a few days to wait on the various withdrawal queues of the LSD protocols.
-4. Once enough ether has been withdrawn, the SEM will relay a message that the withdrawal cycle has been finalised via an event. This information will be relayed by the bridge operators.
-5. On reception of the withdrawal finalisation, the strETH contract locks the final `pricePerShare` for this withdrawal cycle, allowing all users that have requested a withdrawal to burn their strETH and redeem WETH. A new withdrawal cycle will now commence.
+1. During STANDBY state, users can request to be part of the next withdrawal cycle
+2. A withdrawal cycle is initiated by a SEM operator setting the state of the vault to INITIATED. Users cannot deposit ETH anymore.
+3. An operator will calculate off chain the TVL on both chains and submits an unstake command to be fulfilled on ETH. If the vault has a large enough buffer of ether, it can be used to payback users and therefore the unstake command will ask for 0 ether to be unstaked. The state will be changed to UNSTAKE_ACTION_BROADCASTED.
+4. Operators will unstake any necessary ether on ETH to be deposited back to Ronin.
+5. Bridge operators will then log the TVL on ETH and relay it back to ronin to calculate the final `pricePerShare`
+6. The amount of ether required for the period is sent to an escrow contract and can be withdrawn by users that have requested a withdrawal to burn their strETH and redeem WETH. A new withdrawal cycle will now commence and users can deposits again.
 
-![Infographic explaining the flow of depositing and withdrawing ether from ronin into LSDs](./info_v2.png)
+![Infographic explaining the flow of depositing and withdrawing ether from ronin into LSDs](./info_v3.png)
 
 ## Reference
 
@@ -57,9 +54,9 @@ ERC-4626 Tokenised Vault Standard: <https://ethereum.org/en/developers/docs/stan
 
 RocketPool Protocol: <https://docs.rocketpool.net/>
 
-Lido Finance Protocol: <https://docs.lido.fi/>
+StakeWise Protocol: <https://docs.stakewise.io/>
 
-Frax Finance Protocol: <https://docs.frax.finance/>
+
 
 ## Security analysis
 
