@@ -54,9 +54,9 @@ ERC-4626 Tokenised Vault Standard: <https://ethereum.org/en/developers/docs/stan
 
 RocketPool Protocol: <https://docs.rocketpool.net/>
 
-Lido Finance Protocol: <https://docs.lido.fi/>
+StakeWise Protocol: <https://docs.stakewise.io/>
 
-Frax Finance Protocol: <https://docs.frax.finance/>
+
 
 ## Security analysis
 
